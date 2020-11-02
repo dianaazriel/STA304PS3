@@ -1,0 +1,390 @@
+---
+title: "Popular Vote Prediction for the 2020 American Federal Election"
+author: "Kexin Qin and Diana Azriel"
+date: "November 2nd, 2020"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+#install.packages("kableExtra")
+#install.packages("pander")
+library(pander)
+library(kableExtra)
+library(tidyverse)
+```
+
+```{r, include=F, eval=F}
+#functions used for data cleaning 
+clean_census <-function(x) {
+  race_input <- x
+  cleaned_race <- c()
+  for (i in 1:length(x)){
+    if (race_input[i] == "white"){
+      cleaned_race[i] = "White"
+    }
+    if (race_input[i]== "black/african american/negro"){
+      cleaned_race[i] = "Black, or African American"
+    }
+    if (race_input[i]== "american indian or alaska native"){
+      cleaned_race[i] = "American Indian or Alaska Native"
+    }
+    if (race_input[i]== "chinese"){
+      cleaned_race[i] = "Asian (Chinese)"
+    }
+    if (race_input[i]== "japanese"){
+      cleaned_race[i] = "Asian (Japanese)"
+    }
+    if (race_input[i]== "other asian or pacific islander"){
+      cleaned_race[i] = "Other Asian or Pacific Islander"
+    }
+    if (race_input[i]== "other race, nec"){
+      cleaned_race[i] = "Some other race"
+    }
+    if (race_input[i]== "two major races"){
+      cleaned_race[i] = "Some other race"
+    }
+    if (race_input[i]== "three or more major races"){
+      cleaned_race[i] = "Some other race"
+    }
+  }
+        
+  return(cleaned_race)
+}
+
+clean <-function(x){
+input <- x
+clean_r <- c()
+for (i in 1:length(x)){
+    if (input[i] == "Asian (Asian Indian)"){
+      clean_r[i] = "Other Asian or Pacific Islander"
+    }
+    if (input[i] == "Asian (Filipino)") {
+      clean_r[i] = "Other Asian or Pacific Islander"
+    }
+    if (input[i] == "Asian (Korean)") {
+      clean_r[i] = "Other Asian or Pacific Islander"
+    }
+    if (input[i] == "Asian (Vietnamese)") {
+      clean_r[i] = "Other Asian or Pacific Islander"
+    }
+    if (input[i] == "Asian (Other)") {
+      clean_r[i] = "Other Asian or Pacific Islander"
+    }
+    if (input[i] == "Pacific Islander (Guamanian)") {
+      clean_r[i] = "Other Asian or Pacific Islander"
+    }
+    if (input[i] == "Pacific Islander (Native Hawaiian)") {
+      clean_r[i] = "Other Asian or Pacific Islander"
+    }
+    if (input[i] == "Pacific Islander (Other)") {
+      clean_r[i] = "Other Asian or Pacific Islander"
+    }
+    if (input[i] == "Pacific Islander (Samoan)") {
+      clean_r[i] = "Other Asian or Pacific Islander"
+    }
+    else{
+      clean_r[i]=input[i]
+    }
+}
+return(clean_r)
+}
+```
+
+```{r, include=F, eval=F}
+# data cleaning 
+
+library(haven)
+library(tidyverse)
+#setwd("C:/Users/qinkexin/Desktop/304PS3")
+# Read in the raw data
+raw_data <- read_dta("ns20200625.dta")
+# Add the labels
+raw_data <- labelled::to_factor(raw_data)
+# Just keep some variables
+reduced_data <- 
+  raw_data %>% 
+  select(interest,
+         registration,
+         vote_2016,
+         vote_intention,
+         vote_2020,
+         ideo5,
+         employment,
+         foreign_born,
+         gender,
+         census_region,
+         hispanic,
+         race_ethnicity,
+         household_income,
+         education,
+         state,
+         congress_district,
+         age)
+
+
+reduced_data<-
+  reduced_data %>%
+  mutate(vote_trump = 
+           ifelse(vote_2020=="Donald Trump", 1, 0)) %>%
+  mutate(vote_biden = 
+           ifelse(vote_2020=="Joe Biden", 1, 0))
+
+        
+
+# Saving the survey/sample data as a csv file in my
+# working directory
+write_csv(reduced_data, "survey_data.csv")
+
+survey_data <- read_csv("survey_data.csv")
+clean_survey_data <- survey_data %>% mutate(race_new =clean_survey(survey_data$race_ethnicity))
+write_csv(clean_survey_data, "clean_survey_data.csv")
+
+library(haven)
+library(tidyverse)
+# Read in the raw data.
+#setwd("C:/Users/Sammi-Jo/Desktop/PS3")
+raw_data <- read_dta("usa_00001.dta.gz")
+
+
+# Add the labels
+raw_data <- labelled::to_factor(raw_data)
+
+# Just keep some variables that may be of interest (change 
+# this depending on your interests)
+reduced_data <- 
+  raw_data %>% 
+  select(race,
+         sex, 
+         age)
+         
+
+#### What's next? ####
+
+## Here I am only splitting cells by age, but you 
+## can use other variables to split by changing
+## count(age) to count(age, sex, ....)
+
+reduced_data <- 
+  reduced_data %>%
+  count(age, sex, race) %>%
+  group_by(age, sex, race) 
+
+reduced_data <- 
+  reduced_data %>% 
+  filter(age != "less than 1 year old") %>%
+  filter(age != "90 (90+ in 1980 and 1990)")
+
+reduced_data$age <- as.integer(reduced_data$age)
+
+reduced_data <- reduced_data %>% mutate(race_ethnicity=clean_race_variable(race))
+
+
+# Saving the census data as a csv file in my
+# working directory
+write_csv(reduced_data, "census_data.csv")
+```
+
+
+```{r, include=FALSE}
+setwd("/Users/dianaazriel/Documents/University/Fifth Year/STA304/PS3")
+# Loading in the cleaned survey Data
+clean_survey_data <- read_csv("clean_survey_data.csv")
+
+# Loading in the cleaned census Data
+census_data <- read_csv("census_data.csv")
+```
+
+# Popular Vote Prediction for the 2020 American Federal Election
+
+## Kexin Qin and Diana Azriel 
+## November 2nd, 2020
+
+
+# Model
+
+|     We are interested in predicting the popular vote outcome of the 2020 American federal election. We will be using two seperate models to predict the popular vote for both president Donald Trump and former vice president Joe Biden. To do this we wil be employing a multi-variable logsitic regression model and a post-stratification technique. In the following sub-sections we will describe the model specifics and the post-stratification calculation.
+
+## Model Specifics
+
+|     For this report we are interested in the proportion of voters who will vote for Trump, and the proportion of voters who will vote for Biden. We chose a logistic regression for our model as the response variable that we are interested in is binary: one either votes, or does not vote. We will be using the voter's age and their race for our model. Age is recorded as a numeric variable, and race has been divided in to 6 categories: American Indian/Alaska Native, Asian (Chinese), Asian(Japanese), Black/African American, Other Asian/Pacific Islander, some other race. 
+
+$$\log(\frac{p_{trump}}{1-p_{trump}})= \beta_0 + \beta_1x_{age} + \beta_2x_{white} +\beta_3x_{chinese}+\beta_4x_{japanese}+\beta_5x_{black}+\beta_6x_{islander}+\beta_7x_{other}$$
+
+|     $p_{trump}$ represents the probability that a voter will vote for Donald Trump. $\beta_0$ represents the intercept of the model, which is the probability that someone who is American Indian/Alaskan Native with age 0 would vote for Donald Trump. The intercept has no practical interpretation since people younger than 18 years old cannot vote in the US elections. $\beta_1$ represents the change in log odds of voting for Trump for one year increase in age. $\beta_2, \beta_3, \beta_4, \beta_5, \beta_6, \beta_7$ represents the change in log odds of voting for Trump given the voter's ethnicity. 
+
+|     Similarly, we built another model with the same predictor variables as the model above to model $p_{biden}$ , the probability that a voter will vote for Joe Biden. The prime symbol is used to denote that the values for slopes and intercept for the Biden model will be different from the slopes and intercepts for the Trump model. 
+
+$$\log(\frac{p_{biden}}{1-p_{biden}})= \beta_0' + \beta_1'x_{age} + \beta_2'x_{white} +\beta_3'x_{chinese}+\beta_4'x_{japanese}+\beta_5'x_{black}+\beta_6'x_{islander}+\beta_7'x_{other}$$
+
+```{r, echo=FALSE, include=FALSE}
+trump_model <- glm(vote_trump ~ race_new + age, 
+            data=clean_survey_data, family=binomial)
+
+# Model Results (to Report in Results section)
+summary(trump_model)
+
+clean_survey_data <- read_csv("clean_survey_data.csv")
+biden_model <- glm(vote_biden ~ race_new + age, 
+            data=clean_survey_data, family=binomial)
+
+# Model Results (to Report in Results section)
+summary(biden_model)
+
+```
+
+\newpage
+Below is a quick summary of Trump's model:
+
+```{r, echo=FALSE}
+#push model results out in a neat table format
+pander(trump_model)
+```
+
+Below is a quick summary of Biden's model:
+
+```{r, echo=FALSE}
+pander(biden_model)
+```
+
+
+## Data Cleaning 
+
+|     The census data and the survey data used different categories for race, and we tried to match the two as much as possible in our cleaning process. For example, the survey data has Pacific Islanders divided into 4 categories (Guamania, Native Hawaiian, Samoan, and others) while the census data only had a category called "other Asian or Pacific Islander"; we matched these categories together. The census data had categories like "two major races" and "three or more major races" while the survey data only had a category called "some other race", so these categories were matched together as well. 
+
+## Post-Stratification 
+
+|     In order to obtain an estimate of the proportion of voters who will vote for Donald Trump and an estimate of the the proportion of voters who will vote for Joe Biden, we need to perform post-stratification analysis. We used post-stratisfication because it allows us to use our survey data to predict how the entire US population will vote. First, we created bins based on different ages and races. We chose age because studies have shown that age has a very strong influence on voting behavior and political prefrences. Race was chosen because it plays a role in political attitudes as well. Therefore, we have good reason to believe that these two variables will help us with our predictions. After creating bins based on differnt ages and ethnicities, we used the model described previously to estimate the proportion of voters in each bin. Lastly, each of the proportion estimates were weighted by the respective population size of that bin, summed, and divided by the entire population size.
+
+```{r,include=FALSE}
+#number for trump
+census_data <- read_csv("census_data.csv")
+census_data$logodds_estimate <-
+  trump_model %>%
+  predict(newdata = census_data)
+
+census_data$estimate <-
+  exp(census_data$logodds_estimate)/(1+exp(census_data$logodds_estimate))
+
+census_data %>%
+  mutate(alp_predict_prop = estimate*n) %>%
+  summarise(alp_predict = sum(alp_predict_prop)/sum(n))
+```
+
+
+```{r, include=FALSE}
+#number for biden
+census_data$logodds_estimate <-
+  biden_model %>%
+  predict(newdata = census_data)
+
+census_data$estimate <-
+  exp(census_data$logodds_estimate)/(1+exp(census_data$logodds_estimate))
+
+census_data %>%
+  mutate(alp_predict_prop = estimate*n) %>%
+  summarise(alp_predict = sum(alp_predict_prop)/sum(n))
+```
+
+
+\newpage
+# Results
+
+
+|     With the data from the table and the post-stratisfication technique described above, we estimate that the proportion of voters in favour of voting for Donald Trump to be 0.38. This is based off our post-stratification analysis of the proportion of voters in favour of The Republican Party modelled by a logistic general linear model, which accounted for age and race. 
+
+|     We also estimate that the proportion of voters in favour of voting for Joe Biden to be 0.41. This is based off our post-stratification analysis of the proportion of voters in favour of The Democratic Party modelled by a logistic general linear model, which accounted for age and race. 
+
+
+```{r, echo=FALSE,fig.cap = "Trump Vote Distribution by Age", fig.pos="H", out.extra = ''}
+clean_survey_data %>% 
+  mutate(vote_trump_str = ifelse(vote_trump==1,"Trump","Not Trump")) %>%
+  mutate(vote_trump_str = factor(vote_trump_str, levels = c("Trump", "Not Trump"))) %>% 
+  filter(vote_trump_str!= "NA") %>% 
+  ggplot(mapping=aes(x=age))+
+  geom_density(aes(color=vote_trump_str))+
+  scale_color_manual(values=c("#FF6666","#6666FF"))+
+#  scale_color_brewer(palette = "clarity")+
+  ggtitle("2020 Trump Vote by Age")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+|     As we saw in the model results, age is a significant indictor of one's likelihood of voting for Trump. It had a positive value, which means that with increase in age, the log likelihood of one voting for Trump increases, thus the likelihood increases as well. Figure 1 above depicts the density of one voting for trump as well as the density of all other responses broken down by age. We can see that in ages 18-35, approximately, more respondents did not indicate they would vote for Trump. However, from age 35 onwards, the density curve for Trump votes lies above the other density curve. This is consistent with our model results, indicating that at larger ages, an individual is more likely to vote for Trump.
+
+\newpage
+
+
+```{r, echo=FALSE,fig.cap = "Biden Vote Distribution by Age", fig.pos="H", out.extra = ''}
+
+clean_survey_data %>% 
+  mutate(vote_biden_str = ifelse(vote_biden==1, "Biden", "Not Biden")) %>%
+  filter(vote_biden_str!= "NA") %>% 
+  ggplot(mapping=aes(x=age))+
+  geom_density(aes(color=vote_biden_str))+
+  scale_color_manual(values=c("#6666FF", "#FF6666"))+
+# scale_color_brewer(palette = "clarity")+
+  ggtitle("2020 Biden Vote by Age")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+|     Similarly to figure 1, figure 2 shows the density of the 2020 Biden Vote by age. In Biden's model, age had a p-value much larger than 0.05, so it is not surprising that the density curve for Biden votes and all other votes are much closer together, and seem to cross each other at ages 34, 58, and 76 approximately. Younger voters are more likely to vote for Biden, while voters between ages 34 and 58, approximately, are more likely not to do so. In later ages, the curves follow a similar trend and are almost identical.
+
+
+
+```{r, echo=FALSE,fig.cap = "2020 Trump Vote Count by Race", fig.pos="H", out.extra = ''}
+clean_survey_data %>% 
+  mutate(vote_trump_str = ifelse(vote_trump==1,"Trump","Not Trump")) %>%
+  mutate(vote_trump_str = factor(vote_trump_str, levels = c("Trump", "Not Trump"))) %>% 
+  filter(vote_trump_str!= "NA") %>% 
+  ggplot(mapping = aes(x=race_new, fill = vote_trump_str))+
+  ggtitle("2020 Trump Vote Count by Race")+
+  xlab("race")+
+  theme(plot.title = element_text(hjust = 0.5), axis.text=element_text(size=6), axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5))+
+  geom_bar()+#position = "fill")+
+  scale_fill_manual(values=c("#FF6666", "#6666FF"))
+```
+
+|     In the Trump model, all Betas corresponding to race are negative, except that of Whites. We can observe from Figure 3 that individuals in the "Black, or African American" category have the samllest propotion of Trump votes. In our model, their beta value is -1.8, the most negative of all betas. This indicates that if an individual belongs to that category, they are least likely to vote for Trump. Other than the voting breakdown, this graph shows us that that most individuals in the survey are white, with the second largest group being Black or African American.
+
+# Discussion
+
+|     In the interest of predicting the popular vote outcome of the 2020 American federal election, we ran a logistic regression model with the response variables age and race to determine the likelihood of an individual voting for Trump or otherwise, and similarly for Biden or otherwise. Then, through post-stratification using census data, we determined the proportion of voters who will vote for each candidate.
+
+
+|     Based off the estimated proportion of voters in favour of voting for Donalad Trump being 0.38, while the estimated proportion of voters in favour of voting for Joe Biden being 0.41, we predict that Joe Biden will win the American federal election in 2020. Through further analysis, we discovered that age was an influential indicator of whether a person will vote for Trump, but this was not the case for Biden voters. Of all race categories, Whites are most likely to vote for Trump, while Japenese Asians are most likely to vote for Biden.
+
+\newpage
+## Weaknesses
+
+|     Some weakeness of the data include inconsistency between race categorization in the census data versus the survey data. Namely, the survey data had 15 categories for race, while the census data only had 7. In the interest of merging the two, some racial cateogries had to be combined into others, therefore losing some individual indicators in order to perform post-stratification. 
+|     According to the US Census Bureau, Hispanic/Latino is not included as a category for race because people of Hispanic origin may be of many different races. Therefore, our model was not able to take Hispanics/Latinos into account. This can also lead to us losing some individual indicators for our post-stratisfication. 
+|     Additionally, some of the p-values in our models were smaller than 0.05 and differed in the two models. For example, age was a significant indicator in the Trump model, but not in the Biden model. Ideally, a fair comparison of the final voting predictions would have come from models with similar characteristics. 
+
+
+## Next Steps
+
+|     Following the election results, this analysis should be compared to others of its kind in order to determine what factors are most influential in voting decisions because it is possible that age and race are not comprehensive in this determination. Finally, the model should be rewritten with the variables deemed most influential in mind, and rerun leading up to the next election in 2024.
+
+
+# References
+
+Alexander, R. (2020). "01-data_cleaning-survey1.R". Retrieved from: https://q.utoronto.ca/courses/184060
+
+Daróczi, G. (2014). pander: An R Pandoc Writer. R package version 0.5.1. Retrieved from: http://cran.r-project.org/package=pander
+
+Dassonneville, R., & Tien, C. (2020). Introduction to Forecasting the 2020 US Elections. PS: Political Science & Politics, 1-5. doi:10.1017/S104909652000147X
+
+Hao, Z. (2020). kableExtra: Construct Complex Table with 'kable' and Pipe Syntax. R package version 1.3.1. Retrieved from: https://cran.r-project.org/web/packages/kableExtra/index.html 
+ 
+Holland, J. (2013). Age Gap? The Influence of Age on Voting Behavior and Political Preferences in the American Electorate. Retrieved from: https://research.libraries.wsu.edu/xmlui/handle/2376/4982 (the study that showed that age influences voting behavior)
+ 
+Race and Ethnicity Still Play a Role In Political Attitudes. (n.d). Retrieved from: https://iop.harvard.edu/race-and-ethnicity-still-play-role-political-attitudes
+
+Ruggles S. et al. IPUMS USA: Version 10.0 [ACS2018]. Minneapolis, MN: IPUMS, 2020. https://doi.org/10.18128/D010.V10.0
+
+Tausanovitch, C., & Vavreck, L. (2020). Democracy Fund + UCLA Nationscape, October 10-17, 2019 (version 20200814). Retrieved from https://www.voterstudygroup.org/downloads?key=86e190d2-3cd7-4d1c-9ddd-e1931f15a2c1.
+
+
+
